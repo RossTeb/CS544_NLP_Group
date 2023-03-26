@@ -55,7 +55,7 @@ def runProject():
     #     vocab.update(sentence)
 
     word_to_ix = {word: i for i, word in enumerate(vocab)}
-    # ix_to_tag = {v: k for k, v in tag_to_ix.items()}
+    ix_to_tag = {v: k for k, v in tag_to_ix.items()}
     # ix_to_word = {v: k for k, v in word_to_ix.items()}
 
     embedding_matrix = np.zeros((len(vocab), EMBEDDING_DIM))
@@ -111,14 +111,15 @@ def runProject():
             scheduler.step()
             # if epoch == 0 or (epoch + 1) % 5 == 0:
             #     predict2(model, dev_loader, f'Epoch {epoch + 1} / {NUM_EPOCHS}', tag_to_ix)
+        predict2(model, train_loader, f'Epoch {epoch + 1} / {NUM_EPOCHS}', tag_to_ix)
         torch.save(model, 'blstm_glove.pt')
 
     # Prediction for all cases (dev, test, and dev for perl)
-    # print('Beginning Predictions!')
+    print('Beginning Predictions!')
     # predict_perl2(model, dev_loader, 'prediction2.txt', ix_to_tag)
     # predict_dev2(model, dev_loader, 'dev2.out', ix_to_tag)
-    # predict_test2(model, test_data, 'test2.out', word_to_ix, ix_to_tag)
-    # print('Predictions Done!')
+    predict_train(model, train_data, 'test2.out', word_to_ix, ix_to_tag)
+    print('Predictions Done!')
     #
     # with open('word_to_ix_2.pkl', 'wb') as f:
     #     pickle.dump(word_to_ix, f)
@@ -178,6 +179,44 @@ def predict2(model, data_loader, message, tag_to_ix):
                 all_y_pred.append(y_pred_flat[i])
 
     print(message, classification_report(all_y, all_y_pred))
+
+
+# Used to predict on a test data, list of sentences
+# Writes the output to a file, i.e. to test.out
+def predict_train(model, sentences, fname, word_to_ix, ix_to_tag):
+    outputs = []
+    model.eval()
+    with torch.no_grad():
+        for sentence in sentences:
+            spelling_sentence = [get_spelling_feature(sentence)]
+            spelling_sentence = torch.from_numpy(np.array(spelling_sentence, dtype=np.int64)).to(device)
+
+            transformed_sentence = [prepare_sequence(sentence, word_to_ix, use_unk=True)]
+            transformed_sentence = torch.from_numpy(np.array(transformed_sentence, dtype=np.int64)).to(device)
+
+            y_pred_scores = model(transformed_sentence, spelling_sentence)
+            y_pred = torch.argmax(y_pred_scores, dim=2)
+            y_pred_flat = torch.flatten(y_pred).tolist()
+
+            idx = 1
+            output = []
+            for i in range(len(y_pred_flat)):
+                word = sentence[i]
+                pred = ix_to_tag[y_pred_flat[i]]
+                if word == '<PAD>':
+                    break
+                output.append((idx, word, pred))
+                idx += 1
+            outputs.append(output)
+
+    with open(fname, 'w', newline='\n') as f:
+        for i in range(len(outputs)):
+            for j in range(len(outputs[i])):
+                idx, word, pred = outputs[i][j]
+                f.write(f'{idx} {word} {pred}\n')
+            if i != len(outputs) - 1:
+                f.write('\n')
+
 
 
 class NERDataset(Dataset):
