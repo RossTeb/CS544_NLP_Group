@@ -24,13 +24,11 @@ for f in onlyfiles:
 
 df_evidences = pd.DataFrame.from_records(evidences)
 
-df_evidences.head(5)
-df_evidences[df_evidences['id'] == 'Sin_Sukju']
-df_evidences.to_csv('evidences_from_wikipages.csv')
+#df_evidences.to_csv('evidences_from_wikipages.csv')
 
 
 train_data = pd.read_json('/content/drive/MyDrive/train.jsonl',lines = True)
-df_evidences = pd.read_csv('/content/drive/MyDrive/evidences_from_wikipages.csv')
+#df_evidences = pd.read_csv('/content/drive/MyDrive/evidences_from_wikipages.csv')
 
 
 
