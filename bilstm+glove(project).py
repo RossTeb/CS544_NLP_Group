@@ -1,5 +1,3 @@
-
-
 import pandas as pd
 import torch
 from torch import nn
@@ -11,6 +9,16 @@ from tqdm.notebook import tqdm
 from sklearn.metrics import  classification_report
 import gzip
 import re
+import nltk
+nltk.download('punkt')
+nltk.download('stopwords')
+from collections import Counter
+from nltk.corpus import stopwords
+import torch.nn.functional as F
+import nltk 
+nltk.download('words')
+import string
+from sklearn.metrics import classification_report,accuracy_score,f1_score,recall_score
 
 
 class TrainValDataset(Dataset):
@@ -82,7 +90,6 @@ class BiLSTM(nn.Module):
 
         return output
 
-import torch.nn.functional as F
 class BiLSTM(nn.Module):
     def __init__(self, vocab_size, emb_matrix, n_classes, emb_dim, hidden_dim, output_dim, num_layers, dropout, pad_idx):
         super(BiLSTM, self).__init__()
@@ -189,8 +196,7 @@ def predict(model, data):
     
     return all_predictions
 
-import nltk 
-nltk.download('words')
+
 def load_df(path, train=True):
     columns = ["verifiable", "label",'claim','evidence_text']
     df = pd.read_csv(path)
@@ -264,12 +270,7 @@ def train_task(model, train_loader, dev_loader, n_epochs):
 
     training(model, train_loader, dev_loader, criterion, optimizer, scheduler, n_epochs=n_epochs)
 
-import nltk
-nltk.download('punkt')
-nltk.download('stopwords')
 
-from collections import Counter
-from nltk.corpus import stopwords
 
 def process_sentence(sentence, stop_words):
     tokens = nltk.word_tokenize(sentence.lower())
@@ -287,7 +288,7 @@ def get_vocab(df, stop_words):
     vocab_dictionary["<UNK>"] = 1
     return vocab_dictionary
 
-import string
+
 if __name__ == '__main__':
 
     num_workers = 2
@@ -311,38 +312,39 @@ if __name__ == '__main__':
     dev_loader = torch.utils.data.DataLoader(val_data, batch_size=batch_size,num_workers=num_workers)
 
 
+############################################################# TRAINING ########################################################################
+
+#     model = BiLSTM(vocab_size=len(emb),emb_matrix=emb, n_classes=3,
+#                             emb_dim=100,
+#                              hidden_dim=256, output_dim=128, num_layers=1, dropout=0.4, pad_idx=0)
+#     model = model.to(device)
+
+#     train_task(model, train_loader, dev_loader, n_epochs=15)
+
+#     torch.save(model.state_dict(), "blstm_project.pt")
+
+###################################################################### TRAINING END ####################################################### 
+
 
     model = BiLSTM(vocab_size=len(emb),emb_matrix=emb, n_classes=3,
-                            emb_dim=100,
-                             hidden_dim=256, output_dim=128, num_layers=1, dropout=0.4, pad_idx=0)
-    model = model.to(device)
+                                emb_dim=100,
+                                 hidden_dim=256, output_dim=128, num_layers=1, dropout=0.4, pad_idx=0)
+    weights = torch.load('/content/drive/MyDrive/blstm_project.pt')
 
-    train_task(model, train_loader, dev_loader, n_epochs=15)
+    model.load_state_dict(weights)
 
-    torch.save(model.state_dict(), "blstm_project.pt")
+    model.to(device)
 
-   
+    model.eval()
+
+    predicted,trues = [],[]
+    for x,y in tqdm(dev_loader):
+        with torch.no_grad():
+            outputs = model(x)
+            _, predict = torch.max(outputs.data, 1)
+            predicted.extend(predict.cpu().numpy().tolist())
+            trues.extend(y.cpu().numpy().tolist())
 
 
-model = BiLSTM(vocab_size=len(emb),emb_matrix=emb, n_classes=3,
-                            emb_dim=100,
-                             hidden_dim=256, output_dim=128, num_layers=1, dropout=0.4, pad_idx=0)
-weights = torch.load('/content/drive/MyDrive/blstm_project.pt')
 
-model.load_state_dict(weights)
-
-model.to(device)
-
-model.eval()
-
-predicted,trues = [],[]
-for x,y in tqdm(dev_loader):
-    with torch.no_grad():
-        outputs = model(x)
-        _, predict = torch.max(outputs.data, 1)
-        predicted.extend(predict.cpu().numpy().tolist())
-        trues.extend(y.cpu().numpy().tolist())
-
-from sklearn.metrics import classification_report,accuracy_score,f1_score,recall_score
-
-print(classification_report(trues,predicted))
+    print(classification_report(trues,predicted))
