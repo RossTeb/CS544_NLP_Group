@@ -14,21 +14,37 @@ def runProject():
     df = pd.read_csv('train_data_final.csv')
 
     # Separate the claims and evidences into separate arrays
-    claims = np.array(df['claim'])
-    # df['evidence_text_new'] = df['evidence_text'].apply(lambda x: process_evidences(x))
-    evidences = np.array(df['evidence_text'])
-    # evidences = np.array(df['evidence_text_new'])
+    # claims = np.array(df['claim'])
+    # # df['evidence_text_new'] = df['evidence_text'].apply(lambda x: process_evidences(x))
+    # evidences = np.array(df['evidence_text'])
+    # # evidences = np.array(df['evidence_text_new'])
+    #
+    # # Vectorize the claims and evidences using TF-IDF
+    # vectorizer = TfidfVectorizer()
+    # X_claims = vectorizer.fit_transform(claims)
+    # X_evidences = vectorizer.fit_transform(evidences)
+    #
+    # # Concatenate the claims and evidences vectors
+    # X = hstack([X_claims, X_evidences])
+    #
+    # # Create the target variable
+    # y = np.array(df['label'])
+    # y = df['label'].replace({'SUPPORTS': 1, 'REFUTES': 0, 'NOT ENOUGH INFO': 2})
 
-    # Vectorize the claims and evidences using TF-IDF
+    # Separate the claims and evidences into separate arrays
+    claims = df['claim']
+    evidences = df['evidence_text']
+
+    # Concatenate the claims and evidences into a single text string
+    texts = claims + " " + evidences
+
+    # Convert the labels to numeric format
+    # y = np.array(df['label'])
+    y = df['label'].replace({'SUPPORTS': 1, 'REFUTES': 0, 'NOT ENOUGH INFO': 2})
+
+    # Vectorize the text data using TF-IDF
     vectorizer = TfidfVectorizer()
-    X_claims = vectorizer.fit_transform(claims)
-    X_evidences = vectorizer.transform(evidences)
-
-    # Concatenate the claims and evidences vectors
-    X = hstack([X_claims, X_evidences])
-
-    # Create the target variable
-    y = np.array(df['label'])
+    X = vectorizer.fit_transform(texts)
 
     # Split the data into training and test sets
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
