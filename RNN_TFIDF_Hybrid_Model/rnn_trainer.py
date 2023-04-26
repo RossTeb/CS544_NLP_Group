@@ -16,7 +16,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print('Using device:', device)
 
 # load the dataset
-data = pd.read_csv('train_data_final.csv')
+data = pd.read_csv('../train_data_final.csv')
 
 # split the dataset into training and testing sets
 train_data, test_data = train_test_split(data, test_size=0.1, random_state=42)
