@@ -1,18 +1,18 @@
+from collections import Counter
+
+import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
-import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.model_selection import train_test_split
 from torchtext.data.utils import get_tokenizer
 from torchtext.vocab import build_vocab_from_iterator
-from collections import Counter
 
 # check if CUDA is available
 # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 device = torch.device('cpu')
 print('Using device:', device)
-
 
 # load the dataset
 data = pd.read_csv('train_data_rnn.csv')
@@ -26,7 +26,6 @@ tfidf_vectorizer = TfidfVectorizer()
 train_tfidf = tfidf_vectorizer.fit_transform(train_data['claim'])
 test_tfidf = tfidf_vectorizer.transform(test_data['claim'])
 
-
 train_tfidf = torch.from_numpy(train_tfidf.toarray().astype(np.float32))
 train_tfidf = train_tfidf.to(device)
 test_tfidf = torch.from_numpy(test_tfidf.toarray().astype(np.float32))
@@ -36,7 +35,6 @@ print("Tokenizing evidence and claims...")
 tokenizer = get_tokenizer('basic_english')
 train_data_tokens = list(map(tokenizer, train_data['evidence']))
 test_data_tokens = list(map(tokenizer, test_data['evidence']))
-
 
 # build the vocabulary
 print("Building vocabulary...")
@@ -84,19 +82,12 @@ class HybridModel(nn.Module):
         return torch.sigmoid(x)
 
 
-# hybrid_model = HybridModel(len(vocab), 1, 128, 50, 1, 0.2)
-# hybrid_model.to(device)
-# hybrid_model.load_state_dict(torch.load('hybrid_model_state_1.pt'))
-# hybrid_model.eval()
-
 hybrid_model = torch.load("hybrid_model_stable.pt")
 hybrid_model.to(device)
 hybrid_model.eval()
 
-def predict_claim(claim, model, tokenizer, vectorizer, vocab):
-    # prompt the user to enter a claim
 
-    # claim = 'the sky is blue'
+def predict_claim(claim, model, tokenizer, vectorizer, vocab):
     # vectorize the claim using TF-IDF
     claim_tfidf = vectorizer.transform([claim])
     claim_tfidf = torch.from_numpy(claim_tfidf.toarray().astype(np.float32))
@@ -106,7 +97,8 @@ def predict_claim(claim, model, tokenizer, vectorizer, vocab):
     claim_tokens = tokenizer(claim)
     claim_seq = [vocab[token] if token in vocab else vocab['<unk>'] for token in claim_tokens]
     # pad the sequence to a fixed length
-    claim_padded = nn.utils.rnn.pad_sequence([torch.tensor(claim_seq).to(device)], batch_first=True, padding_value=vocab['<pad>'])
+    claim_padded = nn.utils.rnn.pad_sequence([torch.tensor(claim_seq).to(device)], batch_first=True,
+                                             padding_value=vocab['<pad>'])
     # query the model for a prediction
     with torch.no_grad():
         # logits = model(torch.tensor(claim_tfidf.toarray()).to(device), claim_padded)
@@ -129,13 +121,11 @@ print("|             Welcome to the Magic 8 Ball                    |")
 print("--------------------------------------------------------------")
 
 while True:
-
+    # prompt the user to enter a claim
     claim = input('... 1 to Quit ...\nEnter a claim to fact-check:   ')
     if claim == "1":
         break
     else:
         predict_claim(claim, hybrid_model, tokenizer, tfidf_vectorizer, vocab)
 
-
 print("Have a nice day!")
-

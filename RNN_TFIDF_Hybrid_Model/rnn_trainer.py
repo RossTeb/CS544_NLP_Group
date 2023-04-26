@@ -1,5 +1,7 @@
-import pandas as pd
+from collections import Counter
+
 import numpy as np
+import pandas as pd
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -8,8 +10,6 @@ from sklearn.model_selection import train_test_split
 from torch.utils.data import TensorDataset, DataLoader
 from torchtext.data.utils import get_tokenizer
 from torchtext.vocab import build_vocab_from_iterator
-from collections import Counter
-
 
 # check if CUDA is available
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -42,16 +42,22 @@ vocab = build_vocab_from_iterator([counter.keys()], specials=['<unk>', '<pad>'])
 
 # numericalize the evidence sequences
 print("Numericalizing evidence sequences...")
+
+
 def numericalize_tokens(tokens):
     return [vocab[token] if token in vocab else vocab['<unk>'] for token in tokens]
+
 
 train_sequences = [numericalize_tokens(tokens) for tokens in train_data_tokens]
 test_sequences = [numericalize_tokens(tokens) for tokens in test_data_tokens]
 
 # pad the sequences to a fixed length
 print("Padding sequences...")
-train_padded = nn.utils.rnn.pad_sequence([torch.tensor(seq) for seq in train_sequences], batch_first=True, padding_value=vocab['<pad>'])
-test_padded = nn.utils.rnn.pad_sequence([torch.tensor(seq) for seq in test_sequences], batch_first=True, padding_value=vocab['<pad>'])
+train_padded = nn.utils.rnn.pad_sequence([torch.tensor(seq) for seq in train_sequences], batch_first=True,
+                                         padding_value=vocab['<pad>'])
+test_padded = nn.utils.rnn.pad_sequence([torch.tensor(seq) for seq in test_sequences], batch_first=True,
+                                        padding_value=vocab['<pad>'])
+
 
 # define the RNN model
 class RNNModel(nn.Module):
@@ -68,6 +74,7 @@ class RNNModel(nn.Module):
         x = self.fc(x[:, -1, :])
         x = self.dropout(x)
         return torch.sigmoid(x)
+
 
 # define the hybrid model
 class HybridModel(nn.Module):
@@ -96,7 +103,6 @@ test_data['label'] = test_data['label'].map(label_map)
 train_labels = torch.from_numpy(train_data['label'].values.astype(np.float32)).unsqueeze(1)
 train_tfidf = torch.from_numpy(train_tfidf.toarray().astype(np.float32))
 train_padded = torch.from_numpy(train_padded.detach().numpy())
-
 
 test_labels = torch.from_numpy(test_data['label'].values.astype(np.float32)).unsqueeze(1)
 test_tfidf = torch.from_numpy(test_tfidf.toarray().astype(np.float32))
@@ -151,8 +157,30 @@ for epoch in range(num_epochs):
                 print(f'Epoch [{epoch + 1}/{num_epochs}], Batch [{i + 1}/{len(batch)}], Loss: {loss.item():.4f}')
 
     test_loss /= len(test_loader.dataset)
-    print("Epoch: {} Test Loss: {:.4f}".format(epoch+1, test_loss))
+    print("Epoch: {} Test Loss: {:.4f}".format(epoch + 1, test_loss))
     # Save the model
     torch.save(hybrid_model, 'hybrid_model.pt')
     torch.save(hybrid_model.state_dict(), 'hybrid_model_state.pt')
+from sklearn.metrics import classification_report
 
+# evaluate the model on the testing set
+# hybrid_model = torch.load("hybrid_model_stable.pt")
+# hybrid_model.eval()
+test_loss = 0.0
+predictions = []
+true_labels = []
+with torch.no_grad():
+    for batch in test_loader:
+        inputs1, inputs2, labels = batch
+        outputs = hybrid_model(inputs1, inputs2)
+        loss = criterion(outputs, labels)
+        test_loss += loss.item() * inputs1.size(0)
+        predictions += list(outputs.round().squeeze().detach().cpu().numpy())
+        true_labels += list(labels.squeeze().detach().cpu().numpy())
+
+test_loss /= len(test_loader.dataset)
+print("Test Loss: {:.4f}".format(test_loss))
+
+# generate classification report
+report = classification_report(true_labels, predictions, target_names=['REFUTES', 'SUPPORTS'])
+print(report)
