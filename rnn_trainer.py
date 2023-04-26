@@ -19,7 +19,7 @@ print('Using device:', device)
 data = pd.read_csv('train_data_final.csv')
 
 # split the dataset into training and testing sets
-train_data, test_data = train_test_split(data, test_size=0.2, random_state=42)
+train_data, test_data = train_test_split(data, test_size=0.1, random_state=42)
 
 # vectorize the claims using TF-IDF
 print("Vectorizing claims...")
