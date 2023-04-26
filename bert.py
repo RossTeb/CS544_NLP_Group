@@ -204,7 +204,7 @@ def evaluate_model():
 
 
     model = BertClassifier(dropout = 0.5)
-    weights = torch.load('bert_project.pt')
+    weights = torch.load('bert_project.pt',map_location=torch.device('cpu'))
 
     model.load_state_dict(weights)
     model = model.to(device)
