@@ -1,7 +1,9 @@
+
 import pandas as pd
 import torch
 from torch import nn
 import numpy as np
+import torch
 from torch.utils.data import DataLoader,Dataset
 from sklearn.utils.class_weight import compute_class_weight
 from torch.optim.lr_scheduler import CosineAnnealingLR, ReduceLROnPlateau
@@ -9,22 +11,20 @@ from tqdm.notebook import tqdm
 from sklearn.metrics import  classification_report
 import gzip
 import re
+import string
 import nltk
 nltk.download('punkt')
 nltk.download('stopwords')
 from collections import Counter
 from nltk.corpus import stopwords
-import torch.nn.functional as F
-import nltk 
 nltk.download('words')
-import string
-from sklearn.metrics import classification_report,accuracy_score,f1_score,recall_score
-
 
 class TrainValDataset(Dataset):
     def __init__(self,evidences, claims,target):
         self.evidences = evidences
         self.claims = claims
+
+        
         self.target = target
 
     def __len__(self):
@@ -80,16 +80,31 @@ class BiLSTM(nn.Module):
         cl_emb = self.embedding(claims)
         inp = torch.cat((ev_emb,cl_emb),dim=-1)
 
+        #### concatenate first
+
+        # print(ev_len,cl_len)
+
+        # ev_cl = torch.cat((evidences,claims),dim=-1)
+        # print('HERE')
+        # inp = self.embedding(ev_cl) 
+
+        # print(inp.shape)
 
         output, (hidden, cell) = self.lstm(inp)
         lstm_output = output[:,-1,:]
 
         output = self.elu(self.fc(lstm_output))
+
         output = self.dropout_layer(output)
         output = self.classifier(output)
-
+        # output = nn.functional.log_softmax(output, dim=-1)
+        
+       
+        
+    
         return output
 
+import torch.nn.functional as F
 class BiLSTM(nn.Module):
     def __init__(self, vocab_size, emb_matrix, n_classes, emb_dim, hidden_dim, output_dim, num_layers, dropout, pad_idx):
         super(BiLSTM, self).__init__()
@@ -117,28 +132,41 @@ class BiLSTM(nn.Module):
         claims = claims.to(device)
 
 
+        ## get them to equal length using pre padding
         ev_len = evidences.shape[1]
         cl_len = claims.shape[1]
         max_len = max(ev_len,cl_len)
+        # print(claims.shape, evidences.shape)
 
         if ev_len < max_len:
             evidences = F.pad(evidences,(0,max_len-ev_len))
         if cl_len < max_len:
             claims = F.pad(claims,(0,max_len-cl_len))
 
-    
+        # print(claims.shape, evidences.shape)
+        ## get the embeddings
         ev_emb = self.embedding(evidences)
         cl_emb = self.embedding(claims)
 
+        ## concat the embeddings
         ev_cl_emb = torch.cat((ev_emb,cl_emb),dim=-1)
-    
+        # print(ev_cl_emb.shape)
+        ## pass through the lstm
         output, (hidden, cell) = self.lstm(ev_cl_emb)
 
+        ## get the last hidden state
         hidden = torch.cat((hidden[-2,:,:], hidden[-1,:,:]), dim = 1)
         hidden = self.dropout_layer(hidden)
 
+        ## pass through the classifier
         output = self.classifier(hidden)
 
+
+
+
+
+       
+        
     
         return output
 
@@ -153,6 +181,7 @@ def training(model, train_loader, dev_loader, criterion, optimizer, scheduler, n
 
             for data, target in train_loader:
                 target = target.to(device)
+                # print(target.shape)
                 
                 optimizer.zero_grad()
                 output = model(data)
@@ -198,22 +227,43 @@ def predict(model, data):
 
 
 def load_df(path, train=True):
+    # words = set(nltk.corpus.words.words())  
     columns = ["verifiable", "label",'claim','evidence_text']
     df = pd.read_csv(path)
     df = df[columns]
 
-    
+    # df['evidence_text'] = df['evidence_text'].apply(lambda x: ' '.join(w for w in x.split() if w.lower() in words or not w.isalpha()))
+    # df['claim'] = df['claim'].apply(lambda x: ' '.join(w for w in x.split() if w.lower() in words or not w.isalpha()))
+
     df = df.replace({'evidence_text': r'-lrb-'}, {'A': ''}, regex=True)
 
 
 
 
 
+    # df['evidence_text'] = df['evidence_text'].apply(lambda x: x.replace(']','').replace('[',''))
+    # df['evidence_text'] = df['evidence_text'].apply(lambda x: x.replace(r'\t',' '))
+    # # df['evidence_text'] = df['evidence_text'].apply(lambda x: x.replace(r'[0-9] ',' '))
+
     df['evidence_text'] = df['evidence_text'].apply(lambda x: x.replace(']','').replace('[',''))
     df['evidence_text'] = df['evidence_text'].apply(lambda x: x.replace(r'\t',' '))
-
-
+    # df['evidence_text'] = df['evidence_text'].apply(lambda x: x.replace(r'[0-9] ',' '))
+    df['evidence_text'] = df['evidence_text'].apply(lambda x: re.sub(r'-lrb-',' ',x))
+    df['evidence_text'] = df['evidence_text'].apply(lambda x: re.sub(r'-rrb-',' ',x))
+    df['evidence_text'] = df['evidence_text'].apply(lambda x: re.sub(r'[0-9]+\t',' ',x))
+    df['evidence_text'] = df['evidence_text'].apply(lambda x: re.sub(r'\t',' ',x))
+    df['evidence_text'] = df['evidence_text'].apply(lambda x: re.sub(r'-rsb-',' ',x))
+    df['evidence_text'] = df['evidence_text'].apply(lambda x: re.sub(r'-lsb',' ',x))
   
+
+
+
+
+    # df['evidence_text'] = df['evidence_text'].apply(lambda x: x[:min(len(x),250)])
+    # df['claim'] = df['claim'].apply(lambda x: x[:min(len(x),250)])
+
+
+
 
     df['evidence_text'] = df['evidence_text'].apply(lambda x: x.lower())
     df['claim'] = df['claim'].apply(lambda x: x.lower())
@@ -254,15 +304,20 @@ def get_embedding_matrix(path, vocab):
     reverse_vocab = {v:k for k, v in vocab.items()}
     emb_matrix = [np.zeros(100)]
     for i in range(1, len(reverse_vocab)+1):
+        ## generate a random embedding for every unknown word
         unk_emb = np.random.randn(100)*0.5
         emb_matrix.append(emb.get(reverse_vocab[i].lower(), unk_emb))
 
     emb_matrix = np.array(emb_matrix)
     return emb_matrix
 
+    # return emb
 
 def train_task(model, train_loader, dev_loader, n_epochs):
-    
+    # class_weights = [1,2,2] 
+
+    # class_weights = torch.tensor(class_weights,dtype=torch.float)
+
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
 
@@ -288,9 +343,72 @@ def get_vocab(df, stop_words):
     vocab_dictionary["<UNK>"] = 1
     return vocab_dictionary
 
+def evaluate(vocab,stopwords,emb):
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+    df = load_df("dev_data_final.csv", train=True)
+    df = df.dropna()
+  
+
+
+
+    ev, cl, tar = preprocess(df,vocab, stop_words)
+
+
+    val_data = TrainValDataset(ev, cl, tar)
+    dev_loader = torch.utils.data.DataLoader(val_data, batch_size=32,num_workers=2)
+
+
+
+    model = BiLSTM(vocab_size=len(emb),emb_matrix=emb, n_classes=3,
+                            emb_dim=100,
+                             hidden_dim=256, output_dim=128, num_layers=1, dropout=0.4, pad_idx=0)
+    weights = torch.load('blstm_project.pt',map_location=torch.device('cpu'))
+
+    model.load_state_dict(weights)
+    model = model.to(device)
+    model.eval()
+
+    predicted,trues = [],[]
+    for x,y in tqdm(dev_loader):
+        # x,y = x.to(device),y.to(device)
+        with torch.no_grad():
+            outputs = model(x)
+            _, predict = torch.max(outputs.data, 1)
+            predicted.extend(predict.cpu().numpy().tolist())
+            trues.extend(y.cpu().numpy().tolist())
+
+    print(classification_report(trues,predicted))
+
+def train(df,stop_words,vocab,emb):
+
+
+
+
+    ev, cl, tar = preprocess(df,vocab, stop_words)
+
+
+
+
+    train_data = TrainValDataset(ev, cl, tar)
+    train_data, val_data = torch.utils.data.random_split(train_data, [0.8, 0.2])
+    # train_data, val_data = torch.utils.data.random_split(train_data, [3, 3])
+    train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size,num_workers=num_workers)
+    dev_loader = torch.utils.data.DataLoader(val_data, batch_size=batch_size,num_workers=num_workers)
+
+
+
+    model = BiLSTM(vocab_size=len(emb),emb_matrix=emb, n_classes=3,
+                            emb_dim=100,
+                             hidden_dim=256, output_dim=128, num_layers=1, dropout=0.4, pad_idx=0)
+    model = model.to(device)
+
+    train_task(model, train_loader, dev_loader, n_epochs=15)
+
+    torch.save(model.state_dict(), "blstm_project.pt")
+
 
 if __name__ == '__main__':
-
     num_workers = 2
     batch_size = 32
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -301,50 +419,6 @@ if __name__ == '__main__':
     vocab = get_vocab(df, stop_words)
 
     emb = get_embedding_matrix('glove.6B.100d.gz', vocab)
+    # train(df,stop_words,vocab,emb)
+    evaluate(vocab,stop_words,emb)
 
-    ev, cl, tar = preprocess(df,vocab, stop_words)
-
-
-    train_data = TrainValDataset(ev[:6], cl[:6],tar[:6])
-    train_data = TrainValDataset(ev, cl, tar)
-    train_data, val_data = torch.utils.data.random_split(train_data, [0.8, 0.2])
-    train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size,num_workers=num_workers)
-    dev_loader = torch.utils.data.DataLoader(val_data, batch_size=batch_size,num_workers=num_workers)
-
-
-############################################################# TRAINING ########################################################################
-
-#     model = BiLSTM(vocab_size=len(emb),emb_matrix=emb, n_classes=3,
-#                             emb_dim=100,
-#                              hidden_dim=256, output_dim=128, num_layers=1, dropout=0.4, pad_idx=0)
-#     model = model.to(device)
-
-#     train_task(model, train_loader, dev_loader, n_epochs=15)
-
-#     torch.save(model.state_dict(), "blstm_project.pt")
-
-###################################################################### TRAINING END ####################################################### 
-
-
-    model = BiLSTM(vocab_size=len(emb),emb_matrix=emb, n_classes=3,
-                                emb_dim=100,
-                                 hidden_dim=256, output_dim=128, num_layers=1, dropout=0.4, pad_idx=0)
-    weights = torch.load('/content/drive/MyDrive/blstm_project.pt')
-
-    model.load_state_dict(weights)
-
-    model.to(device)
-
-    model.eval()
-
-    predicted,trues = [],[]
-    for x,y in tqdm(dev_loader):
-        with torch.no_grad():
-            outputs = model(x)
-            _, predict = torch.max(outputs.data, 1)
-            predicted.extend(predict.cpu().numpy().tolist())
-            trues.extend(y.cpu().numpy().tolist())
-
-
-
-    print(classification_report(trues,predicted))
