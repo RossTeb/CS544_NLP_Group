@@ -155,5 +155,4 @@ for epoch in range(num_epochs):
     # Save the model
     torch.save(hybrid_model, 'hybrid_model.pt')
     torch.save(hybrid_model.state_dict(), 'hybrid_model_state.pt')
-t
 
